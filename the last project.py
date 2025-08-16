@@ -1,8 +1,36 @@
 import getpass
 import random
+import hashlib
+import os
 
-# Ensure users file exists
+# ensure users file exists
 open("users.txt", "a").close()
+
+def hash_password(password: str) -> str:
+    """Return SHA-256 hex digest of the given password string."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def looks_hashed(s: str) -> bool:
+    """Rudimentary check: SHA-256 hex digest is 64 hex characters."""
+    if not s:
+        return False
+    if len(s) != 64:
+        return False
+    try:
+        int(s, 16)
+        return True
+    except ValueError:
+        return False
+
+def read_users():
+    """Read users.txt and return list of lines (raw)."""
+    with open("users.txt", "r") as f:
+        return f.readlines()
+
+def write_users(lines):
+    """Overwrite users.txt with given lines (each should end with \\n)."""
+    with open("users.txt", "w") as f:
+        f.writelines(lines)
 
 print("Welcome to the user system")
 print("1. Register")
@@ -26,26 +54,24 @@ if choice == "1":
         else:
             break
 
-    # security info (we store it with the user)
     security_answer = input("Security Question - What is the name of your first school? ")
 
     # check if user exists
     exists = False
-    with open("users.txt", "r") as file:
-        lines = file.readlines()
-        for line in lines:
-            parts = line.strip().split(":")
-            if len(parts) >= 1 and parts[0] == username:
-                exists = True
-                break
+    lines = read_users()
+    for line in lines:
+        parts = line.strip().split(":")
+        if len(parts) >= 1 and parts[0] == username:
+            exists = True
+            break
 
     if exists:
         print("Username already exists. Try another one.")
     else:
-        # write username:password:security_answer
+        hashed = hash_password(password)
         with open("users.txt", "a") as file:
-            file.write(f"{username}:{password}:{security_answer}\n")
-        print("✅ Registration successful!")
+            file.write(f"{username}:{hashed}:{security_answer}\n")
+        print("✅ Registration successful! (password stored securely)")
 
 # ----------------------------
 # Login
@@ -56,20 +82,46 @@ elif choice == "2":
         username = input("Enter your username: ")
         password = getpass.getpass("Enter your password: ")
         success = False
-        user_security = ""  # we'll keep security answer if user found
+        user_line_index = None
+        user_parts = None
+        lines = read_users()
 
-        with open("users.txt", "r") as file:
-            users = file.readlines()
-            for user in users:
-                parts = user.strip().split(":")
-                # parts might be [username, password] or [username, password, security]
-                stored_user = parts[0] if len(parts) > 0 else ""
-                stored_pass = parts[1] if len(parts) > 1 else ""
-                sec_ans = parts[2] if len(parts) > 2 else ""
-                if stored_user == username and stored_pass == password:
-                    success = True
-                    user_security = sec_ans
-                    break
+        # find user
+        for idx, line in enumerate(lines):
+            parts = line.strip().split(":")
+            if len(parts) >= 1 and parts[0] == username:
+                user_line_index = idx
+                user_parts = parts
+                break
+
+        if user_line_index is None:
+            print("❌ Invalid username or password.")
+            attempts -= 1
+            if attempts > 0:
+                print(f"⚠️ You have {attempts} attempt(s) left. Try again.")
+            else:
+                print("⛔ Too many failed attempts. Access denied.")
+            continue
+
+        stored_pass = user_parts[1] if len(user_parts) > 1 else ""
+        stored_sec = user_parts[2] if len(user_parts) > 2 else ""
+
+        # two possibilities: stored_pass is hashed, or stored_pass is plain text (old)
+        if looks_hashed(stored_pass):
+            # compare hashed input with stored hash
+            if hash_password(password) == stored_pass:
+                success = True
+        else:
+            # legacy plain-text: compare directly
+            if password == stored_pass:
+                success = True
+                # migrate to hashed password (update file)
+                new_hashed = hash_password(password)
+                # replace the line preserving security answer (if any)
+                sec = stored_sec
+                lines[user_line_index] = f"{username}:{new_hashed}:{sec}\n"
+                write_users(lines)
+                print("ℹ️ Legacy password format detected — account upgraded to secure storage.")
 
         if success:
             print(f"✅ Login successful! Welcome, {username}")
@@ -81,7 +133,17 @@ elif choice == "2":
             # Change password: preserve security answer
             if option == "1":
                 old_pass = getpass.getpass("Enter your current password again: ")
-                if old_pass == password:
+                # verify old password (we have stored hashed now)
+                stored_pass_after = lines[user_line_index].strip().split(":")[1]
+                if looks_hashed(stored_pass_after):
+                    if hash_password(old_pass) == stored_pass_after:
+                        pass_ok = True
+                    else:
+                        pass_ok = False
+                else:
+                    pass_ok = (old_pass == stored_pass_after)
+
+                if pass_ok:
                     while True:
                         new_pass = getpass.getpass("Enter your new password (at least 6 characters): ")
                         if len(new_pass) < 6:
@@ -89,17 +151,16 @@ elif choice == "2":
                         else:
                             break
 
+                    # update file
                     with open("users.txt", "r") as file:
-                        lines = file.readlines()
-
+                        all_lines = file.readlines()
                     with open("users.txt", "w") as file:
-                        for line in lines:
+                        for line in all_lines:
                             parts = line.strip().split(":")
                             uname = parts[0] if len(parts) > 0 else ""
-                            upass = parts[1] if len(parts) > 1 else ""
                             usec = parts[2] if len(parts) > 2 else ""
                             if uname == username:
-                                file.write(f"{username}:{new_pass}:{usec}\n")
+                                file.write(f"{username}:{hash_password(new_pass)}:{usec}\n")
                             else:
                                 file.write(line)
                     print("✅ Password changed successfully!")
@@ -141,22 +202,19 @@ elif choice == "4":
     username = input("Enter your username: ")
     found = False
     found_line = ""
-    with open("users.txt", "r") as file:
-        lines = file.readlines()
-        for line in lines:
-            parts = line.strip().split(":")
-            uname = parts[0] if len(parts) > 0 else ""
-            if uname == username:
-                found = True
-                found_line = line.strip()
-                break
+    lines = read_users()
+    for line in lines:
+        parts = line.strip().split(":")
+        uname = parts[0] if len(parts) > 0 else ""
+        if uname == username:
+            found = True
+            found_line = line.strip()
+            break
 
     if not found:
         print("❌ Username not found.")
     else:
-        # extract stored data
         parts = found_line.split(":")
-        stored_pass = parts[1] if len(parts) > 1 else ""
         stored_security = parts[2] if len(parts) > 2 else ""
 
         print("Choose verification method:")
@@ -164,21 +222,19 @@ elif choice == "4":
         print("2. Receive verification code (simulated)")
         method = input("Pick 1 or 2: ")
 
-        # Method 1: security question
         if method == "1":
             if stored_security == "":
                 print("❌ No security question found for this user.")
             else:
                 answer = input("Security Question - What is the name of your first school? ")
                 if answer.strip().lower() == stored_security.strip().lower():
-                    # allow reset
                     while True:
                         new_pass = getpass.getpass("Enter your new password (at least 6 characters): ")
                         if len(new_pass) < 6:
                             print("Password too short. Please enter at least 6 characters.")
                         else:
                             break
-                    # update file
+                    # update file: preserve security answer
                     with open("users.txt", "r") as file:
                         all_lines = file.readlines()
                     with open("users.txt", "w") as file:
@@ -187,19 +243,15 @@ elif choice == "4":
                             uname = parts[0] if len(parts) > 0 else ""
                             usec = parts[2] if len(parts) > 2 else ""
                             if uname == username:
-                                file.write(f"{username}:{new_pass}:{usec}\n")
+                                file.write(f"{username}:{hash_password(new_pass)}:{usec}\n")
                             else:
                                 file.write(line)
                     print("✅ Password reset successfully using security question.")
                 else:
                     print("❌ Security answer incorrect.")
 
-        # Method 2: verification code (simulated)
         elif method == "2":
-            # generate code
             code = str(random.randint(100000, 999999))
-            # In a real system you'd send the code via email/SMS.
-            # Here we *simulate* sending by printing it (for local testing).
             print(f"[Simulated] Verification code sent: {code}")
             attempts_code = 3
             verified = False
@@ -232,7 +284,7 @@ elif choice == "4":
                         uname = parts[0] if len(parts) > 0 else ""
                         usec = parts[2] if len(parts) > 2 else ""
                         if uname == username:
-                            file.write(f"{username}:{new_pass}:{usec}\n")
+                            file.write(f"{username}:{hash_password(new_pass)}:{usec}\n")
                         else:
                             file.write(line)
                 print("✅ Password reset successfully using verification code.")
