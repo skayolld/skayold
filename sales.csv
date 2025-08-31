@@ -1,4 +1,3 @@
-Date,Sales
-2025-01-01,100
-2025-01-02,150
-2025-01-03,200
+Product,Sales,Cost
+Product A,1200,700
+Product B,900,400

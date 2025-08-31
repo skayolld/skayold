@@ -39,25 +39,60 @@
 # plt.show()
 
 
+# import pandas as pd
+# import matplotlib.pyplot as plt
+
+# # نقرأ البيانات
+# df = pd.read_csv("sales.csv")
+
+# # نفترض في ملف CSV عندنا عمود Date
+# # لازم يكون العمود بصيغة تاريخ
+# df["Date"] = pd.to_datetime(df["Date"])
+
+# # نرسم خط للمبيعات حسب التاريخ
+# plt.plot(df["Date"], df["Sales"], marker="o", label="Sales", color="blue")
+
+# # إضافة بعض التفاصيل
+# plt.xlabel("Date")
+# plt.ylabel("Sales")
+# plt.title("Sales Over Time")
+# plt.legend()
+# plt.xticks(rotation=45)   # نلف التواريخ عشان أوضح
+# plt.grid(True)            # نضيف شبكة خفيفة
+
+# plt.show()
+
+# import pandas as pd
+# import matplotlib.pyplot as plt
+
+# df = pd.read_csv("sales.csv")
+
+# # تحويل العمود Date إلى نوع تاريخ
+# df["Date"] = pd.to_datetime(df["Date"])
+
+# plt.plot(df["Date"], df["Sales"], label="Sales")
+# plt.xlabel("Date")
+# plt.ylabel("Sales")
+# plt.title("Sales Trend Over Time")
+# plt.legend()
+# plt.show()
+
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
 # نقرأ البيانات
 df = pd.read_csv("sales.csv")
 
-# نفترض في ملف CSV عندنا عمود Date
-# لازم يكون العمود بصيغة تاريخ
-df["Date"] = pd.to_datetime(df["Date"])
+# نضيف عمود تواريخ وهمي بنفس طول البيانات
+df["Date"] = pd.date_range(start="2025-01-01", periods=len(df), freq="D")
 
-# نرسم خط للمبيعات حسب التاريخ
-plt.plot(df["Date"], df["Sales"], marker="o", label="Sales", color="blue")
+# نرسم خط بسيط للمبيعات
+plt.plot(df["Date"], df["Sales"], label="Sales", marker="o")
 
-# إضافة بعض التفاصيل
 plt.xlabel("Date")
 plt.ylabel("Sales")
-plt.title("Sales Over Time")
+plt.title("Sales Trend Over Time")
+plt.xticks(rotation=45)   # تدوير التواريخ عشان تقرأها أوضح
 plt.legend()
-plt.xticks(rotation=45)   # نلف التواريخ عشان أوضح
-plt.grid(True)            # نضيف شبكة خفيفة
-
 plt.show()
